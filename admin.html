@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админка | KartoДневник</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&display=swap" rel="stylesheet">
+    <style>
+        body { background: #0f0c1b; color: #fff; font-family: 'Montserrat', sans-serif; padding: 20px; }
+        .box { max-width: 500px; margin: 20px auto; background: rgba(255,255,255,0.05); padding: 25px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.1); }
+        h2 { color: #00f5d4; margin-bottom: 15px; text-align: center; }
+        input, select, textarea { width: 100%; padding: 12px; margin: 8px 0 15px; border-radius: 10px; background: #1a162b; border: 1px solid #332d4a; color: #fff; font-size: 0.95rem; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #7b2cbf; border: none; color: #fff; border-radius: 10px; font-weight: 700; cursor: pointer; transition: 0.2s; font-size: 1rem; }
+        button:hover { background: #9d4edd; }
+        .flex { display: flex; gap: 10px; }
+        .back-btn { background: none; border: 1px solid rgba(255,255,255,0.2); margin-top: 10px; }
+        .status { text-align: center; font-size: 0.95rem; color: #ffee32; margin-top: 12px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="box" id="loginBox">
+    <h2>🔐 Вход в Админку</h2>
+    <input type="password" id="passInput" placeholder="Введите пароль">
+    <button onclick="login()">Войти</button>
+    <button class="back-btn" onclick="window.location.href='index.html'">← На сайт</button>
+</div>
+
+<div class="box" id="adminBox" style="display: none;">
+    <h2>⚙️ Панель Управления</h2>
+    
+    <label>Добавить новый класс:</label>
+    <div class="flex">
+        <input type="text" id="newClassInput" placeholder="Например: 6-Е">
+        <button style="width: auto; white-space: nowrap;" onclick="addClass()">+ Добавить</button>
+    </div>
+
+    <hr style="border-color: rgba(255,255,255,0.1); margin: 20px 0;">
+
+    <label>Выбери класс:</label>
+    <select id="classSelect"></select>
+
+    <label>Выбери дату задания:</label>
+    <input type="date" id="dateInput">
+
+    <label>Предмет:</label>
+    <input type="text" id="subjectInput" placeholder="Например: Математика">
+
+    <label>Текст домашнего задания:</label>
+    <textarea id="textInput" rows="4" placeholder="Стр 45, № 12, 14"></textarea>
+
+    <button id="saveBtn" onclick="saveHW()">🚀 Опубликовать на GitHub</button>
+    <div id="status" class="status"></div>
+    <button class="back-btn" onclick="window.location.href='index.html'">← Вернуться на сайт</button>
+</div>
+
+<script>
+    const CLOUD_URL = "https://kartodnevnls-default-rtdb.firebaseio.com/lyceum6.json";
+    let db = { classes: ["5-А", "6-Е", "7-Б", "8-А", "9-В", "10-Б", "11-А"], homework: {} };
+
+    async function loadCloudDB() {
+        try {
+            let res = await fetch(CLOUD_URL);
+            if(res.ok) {
+                let data = await res.json();
+                if(data && data.classes) db = data;
+            }
+        } catch(e) {}
+        loadClasses();
+    }
+
+    function login() {
+        if (document.getElementById('passInput').value === "po19sa0hp9") {
+            document.getElementById('loginBox').style.display = "none";
+            document.getElementById('adminBox').style.display = "block";
+            loadCloudDB();
+            document.getElementById('dateInput').valueAsDate = new Date();
+        } else {
+            alert("Неверный пароль!");
+        }
+    }
+
+    function loadClasses() {
+        const select = document.getElementById('classSelect');
+        select.innerHTML = "";
+        db.classes.forEach(c => {
+            select.innerHTML += `<option value="${c}">${c}</option>`;
+        });
+    }
+
+    async function pushToCloud() {
+        const statusDiv = document.getElementById('status');
+        statusDiv.innerText = "⏳ Сохранение в облако Google...";
+        try {
+            let res = await fetch(CLOUD_URL, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(db)
+            });
+            if(res.ok) {
+                statusDiv.innerText = "✅ ОПУБЛИКОВАНО! Домашка видна всем!";
+                setTimeout(() => statusDiv.innerText = "", 4000);
+            } else {
+                statusDiv.innerText = "❌ Ошибка HTTP: " + res.status;
+            }
+        } catch(e) {
+            statusDiv.innerText = "❌ Ошибка соединения!";
+        }
+    }
+
+    async function addClass() {
+        const val = document.getElementById('newClassInput').value.trim();
+        if(!val) return;
+        if(!db.classes.includes(val)) {
+            db.classes.push(val);
+            loadClasses();
+            await pushToCloud();
+            document.getElementById('newClassInput').value = "";
+        }
+    }
+
+    function parseDateToKey(rawDate) {
+        if(!rawDate) return "";
+        let parts = rawDate.split('-');
+        if(parts.length === 3) return `${parts[2]}.${parts[1]}.${parts[0]}`;
+        return rawDate;
+    }
+
+    async function saveHW() {
+        const cClass = document.getElementById('classSelect').value;
+        const rawDate = document.getElementById('dateInput').value;
+        const dateKey = parseDateToKey(rawDate);
+        const subject = document.getElementById('subjectInput').value.trim();
+        const text = document.getElementById('textInput').value.trim();
+
+        if(!dateKey || !subject || !text) {
+            alert("Заполните дату, предмет и текст задания!");
+            return;
+        }
+
+        if(!db.homework) db.homework = {};
+        if(!db.homework[cClass]) db.homework[cClass] = {};
+        if(!db.homework[cClass][dateKey]) db.homework[cClass][dateKey] = [];
+
+        db.homework[cClass][dateKey].push({
+            subject: subject,
+            text: text
+        });
+
+        await pushToCloud();
+
+        document.getElementById('subjectInput').value = "";
+        document.getElementById('textInput').value = "";
+    }
+</script>
+</body>
+</html>
